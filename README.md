@@ -192,33 +192,68 @@ sudo /usr/local/sbin/bw-tg-backup --config /etc/bw-tg-backup.conf \
 
 ## Восстановление
 
-На отдельном компьютере с GNU coreutils, jq, GNU tar и age скачайте **все**
-части одного набора и соответствующий `manifest.json` в новый приватный каталог.
+Проверка, сборка и расшифровка ниже подходят для **Linux и macOS**, в Bash или
+zsh. Нужны `jq`, `age`, `shasum` и `tar`. Скачайте **все** части одного набора
+и соответствующий `manifest.json` в новый приватный каталог и откройте в нём
+терминал.
 Если Telegram добавил суффикс к имени скачанного файла, верните имя из манифеста.
 Манифест приходит последним; без полного набора копия не считается доставленной.
 
-Проверка и сборка в Bash (работает также для единственного файла):
+Укажите фактический путь к секретному ключу в `BACKUP_KEY`. Блок работает
+также для единственного файла; результаты сохраняются в новый каталог `verify.…`:
 
 ```bash
-set -euo pipefail
-umask 077
-jq -er '.parts[] | "\(.sha256)  \(.name)"' manifest.json | sha256sum --check --strict
-while IFS= read -r part; do
-  cat -- "$part"
-done < <(jq -er '.parts[].name' manifest.json) > restored.tar.gz.age
-printf '%s  restored.tar.gz.age\n' "$(jq -er '.archive_sha256' manifest.json)" |
-  sha256sum --check --strict
-age --decrypt -i /safe/path/backup-key.txt -o restored.tar.gz restored.tar.gz.age
-tar --list --gzip --file restored.tar.gz
+(
+  set -euo pipefail
+  umask 077
+
+  BACKUP_KEY='/safe/path/backup-key.txt'
+  VERIFY_DIR=$(mktemp -d './verify.XXXXXXXX')
+
+  jq -er '.parts[] | "\(.sha256)  \(.name)"' manifest.json \
+    > "$VERIFY_DIR/parts.sha256"
+  shasum -a 256 --check --strict "$VERIFY_DIR/parts.sha256"
+
+  jq -er '.parts[].name' manifest.json > "$VERIFY_DIR/parts.list"
+  while IFS= read -r part; do
+    cat -- "$part"
+  done < "$VERIFY_DIR/parts.list" > "$VERIFY_DIR/restored.tar.gz.age"
+
+  printf '%s  %s\n' \
+    "$(jq -er '.archive_sha256' manifest.json)" \
+    "$VERIFY_DIR/restored.tar.gz.age" |
+    shasum -a 256 --check --strict
+
+  age --decrypt -i "$BACKUP_KEY" \
+    -o "$VERIFY_DIR/restored.tar.gz" \
+    "$VERIFY_DIR/restored.tar.gz.age"
+
+  tar -tzf "$VERIFY_DIR/restored.tar.gz" > "$VERIFY_DIR/files.txt"
+
+  printf 'Проверка успешна. Результаты: %s\n' "$VERIFY_DIR"
+)
+```
+
+В созданном каталоге находятся собранный `restored.tar.gz.age`, расшифрованный
+`restored.tar.gz` и список содержимого `files.txt`.
+
+`age` проверяет подлинность зашифрованного содержимого; SHA-256 помогает выявить
+неполные, перепутанные или повреждённые части. Расшифрованный архив содержит
+конфигурационные секреты — храните его в приватном каталоге.
+
+Для дальнейшего **восстановления на Linux** нужен GNU tar. Перенесите проверенный
+архив на целевой сервер, если проверяли его на Mac. Перейдите в каталог с архивом
+(подставьте фактический путь вместо `/path/to/verify.XXXXXXXX`) и распакуйте его:
+
+```bash
+cd /path/to/verify.XXXXXXXX
 mkdir -m 0700 restored
 sudo tar --extract --gzip --acls --xattrs --numeric-owner --same-owner --same-permissions \
   --file restored.tar.gz --directory restored
 ```
 
-`age` проверяет подлинность зашифрованного содержимого; SHA-256 помогает выявить
-неполные, перепутанные или повреждённые части. Извлекайте архив только после
-успешного завершения расшифровки. `restored.tar.gz` и `restored/bwdata` содержат
-незашифрованные конфигурационные секреты — храните их в приватном каталоге.
+Извлекайте архив только после успешного завершения расшифровки.
+`restored/bwdata` также содержит незашифрованные конфигурационные секреты.
 
 На целевом сервере подготовьте **совместимую версию** официального Bitwarden
 (версии образов можно найти в восстановленном `bwdata/docker/docker-compose.yml`).
