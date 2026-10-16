@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Bitwarden backup at 03:00 Moscow time
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Moscow
+Persistent=true
+AccuracySec=1min
+Unit=bw-tg-backup.service
+
+[Install]
+WantedBy=timers.target

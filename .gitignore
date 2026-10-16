@@ -1,0 +1,7 @@
+backup.conf
+*.age
+*.partial
+*.part[0-9]*
+*key.txt
+__pycache__/
+.DS_Store

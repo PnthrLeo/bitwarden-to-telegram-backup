@@ -1,0 +1,16 @@
+# Trusted Bash configuration. Install as /etc/bw-tg-backup.conf, root:root 0600.
+BITWARDEN_DIR='/opt/bitwarden'
+BITWARDEN_USER='bitwarden'
+BACKUP_DIR='/var/backups/bw-tg-backup'
+
+# Generate the identity OFF the server: age-keygen -o backup-key.txt
+# Copy only the public recipient printed by age-keygen here.
+AGE_RECIPIENT='age1REPLACE_WITH_YOUR_PUBLIC_KEY'
+TELEGRAM_BOT_TOKEN='123456789:REPLACE_WITH_BOTFATHER_TOKEN'
+TELEGRAM_CHAT_ID='123456789'
+
+RETENTION_DAYS=7
+PART_BYTES=45000000
+SERVICE_TIMEOUT=300
+READY_TIMEOUT=300
+HTTP_TIMEOUT=600
